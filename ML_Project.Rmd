@@ -1,0 +1,162 @@
+## Practical Machine Learning Project
+### Human Activity Recognition and Prediction
+#### *Prepared by: Bernard Kiyanda*
+
+## Summary
+  
+Human Activity Recognition - HAR - using wearable accelerometer has emerged as a key research area in the last years and is gaining increasing attention by the pervasive computing research community, especially for the development of context-aware systems. There are many potential applications for HAR, like: elderly monitoring, life log systems for monitoring energy expenditure and for supporting weight-loss programs, digital assistants for weight lifting exercises, etc.  
+
+For this project, the error calculation on the provided data set indicated that the **Random Forest** prediction model was more reliable to predict the outcome (with an accuracy = 0.9963), versus the **Decision Tree** model (Accuracy = 0.7382). Therefore we used the the Random Forest model to predict the final outcome of the test data set.
+  
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+### References
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements. Proceedings of 21st Brazilian Symposium on Artificial Intelligence. Advances in Artificial Intelligence - SBIA 2012. In: Lecture Notes in Computer Science. , pp. 52-61. Curitiba, PR: Springer Berlin / Heidelberg, 2012. ISBN 978-3-642-34458-9. DOI: 10.1007/978-3-642-34459-6_6. Read more: http://groupware.les.inf.puc-rio.br/har
+
+
+## Preparing and cleaning the training data
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. The outcome variable is "classe", a factor variable with 5 levels. Participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways:  
+Class A: exactly according to the specification (correct)
+Class B: throwing the elbows to the front  
+Class C: lifting the dumbbell only halfway  
+Class D: lowering the dumbbell only halfway  
+Class E: throwing the hips to the front  
+  
+First let's load the data into "trainingActivity" 
+```{r}
+set.seed(9876)
+trainingActivity <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+#open the CSV files and observe that the first 7 columns are not needed for the analysis:
+#user_name  raw_timestamp_part_1	raw_timestamp_part_2	cvtd_timestamp	new_window	num_window
+trainingActivity<-trainingActivity[ ,-c(1:7)]
+
+trainingActivity<-trainingActivity[,colSums(is.na(trainingActivity)) == 0]
+dim(trainingActivity)
+```
+Summary of the data structure:  
+```{r}
+str(trainingActivity)
+```
+
+### Cross validation - Partionning the data
+
+In order to perform cross-validation, i.e. the ability to validate our models created using training data subset with another separate training data subset used for prediction, the training data set is partionned into 2 sets: trainingActivity1 (75%) and trainingActivity2 (25%). This will be performed using random partinioning without replacement.
+
+```{r}
+library(caret)
+subsets <- createDataPartition(y=trainingActivity$classe, p=0.75, list=FALSE)
+trainingActivity1 <- trainingActivity[subsets, ] 
+trainingActivity2 <- trainingActivity[-subsets, ]
+```
+
+## Build machine learning algorithms
+
+Now, let's build machine learning algorithms to predict activity quality from the activity monitors. The algorithm will be performed on the training data set, and used later predict the final outcome of the test data set. Two prediction models will be developed.
+
+### Model 1: Decision tree
+
+Build a first model using the training set trainingActivity1 and predict the outcome using trainingActivity2.
+
+```{r}
+library(rpart)
+modFit1 <- rpart(classe ~ .,method="class",data=trainingActivity1)
+#print(modFit1$finalModel)
+
+#plot decision tree
+library(rpart.plot)
+rpart.plot(modFit1, main="Decision Tree", extra=102, under=TRUE, faclen=0)
+
+# Predicting on the second training set:
+prediction1 <- predict(modFit1, trainingActivity2, type = "class")
+
+```
+
+### Model 2: Random forest
+
+Build a second model using the same training set trainingActivity1 and predict the outcome using trainingActivity2.
+
+```{r}
+library(randomForest)
+modFit2 <- randomForest(classe ~. , data=trainingActivity1, method="class")
+# Predicting on the second training set:
+prediction2 <- predict(modFit2, trainingActivity2, type = "class")
+```
+
+## Estimate the error for each model
+
+Estimate the error for model 1:
+
+```{r}
+confusionMatrix(prediction1, trainingActivity2$classe)
+```
+
+Estimate the error for model 2:
+
+```{r}
+confusionMatrix(prediction2, trainingActivity2$classe)
+```
+  
+**The error calculation indicates that the Random Forest model is more reliable to predict the outcome (Accuracy : 0.9963), versus the decision tree model (Accuracy : 0.7382). Therefore we will use the the Random Forest model to predict the outcome of the test data set.**  
+  
+Note that if you get this error when running confusionMatrix, then run the identical function to understand why the data levels are not the same:
+"Error in confusionMatrix.default(prediction1, testActivity$classe) : the data and reference factors must have the same number of levels"
+```{r}
+identical(levels(prediction1),levels(trainingActivity2$classe))
+levels(prediction1); levels(trainingActivity2$classe)
+```
+
+
+### Expected out of sample error
+
+The estimated out-of-sample error is 0.004, or 0.4%. The out-of-sample error is calculated as 1 - accuracy for predictions made on a  cross-validation set. Given that the model accuracy is above 99% (Accuracy=0.9963), we can expect missclassification will be low.
+
+### Analyzing the importance of each variable in our prediction model
+
+```{r}
+varImp2 <- varImp(modFit2)
+#varImp2[with(varImp2,order(varImp2$Overall)),]
+varImp2
+```
+
+## Results - Use model 2 to predict the test data set
+
+The final prediction on the test data set in pml-testing.csv. 
+
+```{r}
+# Cleaning the test data
+testActivity <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!", ""))
+#open the CSV files and observe that the first 7 columns are not needed for the analysis:
+#user_name  raw_timestamp_part_1  raw_timestamp_part_2  cvtd_timestamp  new_window	num_window
+testActivity<-testActivity[ ,-c(1:7)]
+testActivity<-testActivity[,colSums(is.na(testActivity)) == 0]
+dim(testActivity)
+
+# Use the prediction model on the test data
+TestPrediction <- predict(modFit2, testActivity, type = "class")
+TestPrediction
+```
+
+The following classes are predicted for each test observation:  
+
+1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20   
+B  A  B  A  A  E  D  B  A  A  B  C  B  A  E  E  A  B  B  B   
+Levels: A B C D E  
+
+
+### Project Submission
+
+```{r}
+# Write files for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(TestPrediction)
+```
